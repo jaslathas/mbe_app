@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "983524038846",
+    "project_id": "time-track-mbe",
+    "storage_bucket": "time-track-mbe.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:983524038846:android:a573779e5cbf2d100926ef",
+        "android_client_info": {
+          "package_name": "com.example.time_track"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAhTU6vJ4G69gkmbiA7CbEvNykxXuq9oxU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
