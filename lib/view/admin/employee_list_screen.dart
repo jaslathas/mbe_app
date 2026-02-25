@@ -1,131 +1,164 @@
 import 'package:flutter/material.dart';
-import 'add_employee_screen.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-class EmployeeListScreen extends StatefulWidget {
+class EmployeeListScreen extends StatelessWidget {
   const EmployeeListScreen({super.key});
 
   @override
-  State<EmployeeListScreen> createState() => _EmployeeListScreenState();
-}
+  Widget build(BuildContext context) {
+    final usersRef = FirebaseFirestore.instance.collection('users');
 
-class _EmployeeListScreenState extends State<EmployeeListScreen> {
-  final List<Map<String, String>> employees = [
-    {
-      'name': 'Anu R',
-      'role': 'Structural Draftsman',
-      'email': 'anu@example.com',
-      'id': 'EMP-001',
-    },
-    {
-      'name': 'Rahul K',
-      'role': 'Structural Engineer',
-      'email': 'rahul@example.com',
-      'id': 'EMP-002',
-    },
-  ];
+    return Scaffold(
+      appBar: AppBar(title: const Text("Employees")),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: usersRef.snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(child: Text("Something went wrong"));
+          }
 
-  void _addEmployee(Map<String, String> newEmployee) {
-    setState(() {
-      employees.add(newEmployee);
-    });
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No Employees Found"));
+          }
+
+          final employees = snapshot.data!.docs;
+
+          return ListView.builder(
+            itemCount: employees.length,
+            itemBuilder: (context, index) {
+              final doc = employees[index];
+
+              // ✅ SAFE DATA EXTRACTION
+              final data = doc.data() as Map<String, dynamic>? ?? {};
+
+              final name = data['name'] ?? 'No Name';
+              final email = data.containsKey('email')
+                  ? data['email']
+                  : 'No Email';
+              final role = data['role'] ?? 'No Role';
+              final rate = data['hourlyRate'] ?? 0;
+              final isActive = data['isActive'] ?? true;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isActive ? Colors.green : Colors.red,
+                    child: Text(
+                      name.toString().isNotEmpty
+                          ? name.toString()[0].toUpperCase()
+                          : '?',
+                    ),
+                  ),
+                  title: Text(name.toString()),
+                  subtitle: Text("$email\nRole: $role | Rate: ₹$rate"),
+                  isThreeLine: true,
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      if (value == 'edit') {
+                        _showEditDialog(context, doc.id, data);
+                      } else if (value == 'toggle') {
+                        await usersRef.doc(doc.id).update({
+                          'isActive': !isActive,
+                        });
+                      } else if (value == 'delete') {
+                        await usersRef.doc(doc.id).delete();
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'edit', child: Text("Edit")),
+                      PopupMenuItem(
+                        value: 'toggle',
+                        child: Text(isActive ? "Deactivate" : "Activate"),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Text("Delete (Firestore Only)"),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 
-  void _deleteEmployee(int index) {
+  ////////////////////////////////////////////////////////////
+  /// EDIT EMPLOYEE DIALOG
+  ////////////////////////////////////////////////////////////
+
+  void _showEditDialog(
+    BuildContext context,
+    String docId,
+    Map<String, dynamic> data,
+  ) {
+    final nameController = TextEditingController(text: data['name'] ?? '');
+    final rateController = TextEditingController(
+      text: data['hourlyRate']?.toString() ?? '0',
+    );
+
+    String role = data['role'] ?? 'Employee';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Delete Employee"),
-        content: const Text("Are you sure you want to delete this employee?"),
+      builder: (_) => AlertDialog(
+        title: const Text("Edit Employee"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: "Name"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: rateController,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: "Hourly Rate"),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: role,
+              items: const [
+                DropdownMenuItem(value: 'Employee', child: Text("Employee")),
+                DropdownMenuItem(value: 'Admin', child: Text("Admin")),
+                DropdownMenuItem(value: 'Director', child: Text("Director")),
+              ],
+              onChanged: (val) {
+                role = val ?? 'Employee';
+              },
+              decoration: const InputDecoration(labelText: "Role"),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text("Cancel"),
           ),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                employees.removeAt(index);
-              });
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(docId)
+                  .update({
+                    'name': nameController.text.trim(),
+                    'hourlyRate': double.tryParse(rateController.text) ?? 0,
+                    'role': role,
+                  });
+
               Navigator.pop(context);
             },
-            child: const Text("Delete"),
+            child: const Text("Update"),
           ),
         ],
-      ),
-    );
-  }
-
-  void _editEmployee(int index) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddEmployeeScreen(employeeData: employees[index]),
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        employees[index] = result;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Employee List')),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          final result = await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddEmployeeScreen()),
-          );
-
-          if (result != null) {
-            _addEmployee(result);
-          }
-        },
-        child: const Icon(Icons.person_add),
-      ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: employees.length,
-        itemBuilder: (context, index) {
-          final employee = employees[index];
-
-          return Card(
-            child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.blue,
-                child: Icon(Icons.person, color: Colors.white),
-              ),
-              title: Text(employee['name']!),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(employee['role']!),
-                  Text(
-                    employee['email']!,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-              trailing: PopupMenuButton<String>(
-                onSelected: (value) {
-                  if (value == 'edit') {
-                    _editEmployee(index);
-                  } else if (value == 'delete') {
-                    _deleteEmployee(index);
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }

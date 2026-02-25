@@ -5,9 +5,10 @@ import 'package:time_track/auth/login_screen.dart';
 import 'package:time_track/view/admin/admin_dashboard.dart';
 import 'package:time_track/view/director/director_dashboard.dart';
 import 'package:time_track/view/employee/employee_home_screen.dart';
+import 'package:time_track/view/no_access_screen.dart';
 
-class AuthWrapper extends StatelessWidget {
-  const AuthWrapper({super.key});
+class RoleRouter extends StatelessWidget {
+  const RoleRouter({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -23,33 +24,22 @@ class AuthWrapper extends StatelessWidget {
           .doc(user.uid)
           .get(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (!snapshot.hasData) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Scaffold(
-            body: Center(
-              child: Text(
-                "User profile not found.\nContact admin.",
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
+        final role = snapshot.data!['role'];
 
-        final data = snapshot.data!.data() as Map<String, dynamic>;
-
-        final role = data['role'] ?? 'employee';
-
-        if (role == 'admin') {
+        if (role == 'employee') {
+          return const EmployeeHomeScreen();
+        } else if (role == 'admin') {
           return const AdminDashboard();
         } else if (role == 'director') {
           return const DirectorDashboard();
         } else {
-          return const EmployeeHomeScreen();
+          return const NoAccessScreen();
         }
       },
     );

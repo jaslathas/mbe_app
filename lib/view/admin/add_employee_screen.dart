@@ -1,9 +1,12 @@
+// add_employee_screen.dart
+
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AddEmployeeScreen extends StatefulWidget {
-  final Map<String, String>? employeeData;
-
-  const AddEmployeeScreen({super.key, this.employeeData});
+  const AddEmployeeScreen({super.key});
 
   @override
   State<AddEmployeeScreen> createState() => _AddEmployeeScreenState();
@@ -14,26 +17,67 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
 
   final nameController = TextEditingController();
   final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final hourlyRateController = TextEditingController();
 
-  String selectedRole = 'Employee';
+  String selectedRole = "Employee";
+  bool isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
+  Future<void> _createEmployee() async {
+    if (!_formKey.currentState!.validate()) return;
 
-    if (widget.employeeData != null) {
-      nameController.text = widget.employeeData!['name']!;
-      emailController.text = widget.employeeData!['email']!;
-      selectedRole = widget.employeeData!['role']!;
+    setState(() => isLoading = true);
+
+    try {
+      // Create secondary Firebase app
+      FirebaseApp secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp',
+        options: Firebase.app().options,
+      );
+
+      FirebaseAuth secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      // Create auth account
+      UserCredential credential = await secondaryAuth
+          .createUserWithEmailAndPassword(
+            email: emailController.text.trim(),
+            password: passwordController.text.trim(),
+          );
+
+      String uid = credential.user!.uid;
+
+      // Save user data in Firestore
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'name': nameController.text.trim(),
+        'email': emailController.text.trim(),
+        'role': selectedRole,
+        'hourlyRate': double.tryParse(hourlyRateController.text.trim()) ?? 0,
+        'employeeCode': "EMP-${DateTime.now().millisecondsSinceEpoch}",
+        'isActive': true,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      await secondaryApp.delete();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Employee Created Successfully")),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
+
+    setState(() => isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEditing = widget.employeeData != null;
-
     return Scaffold(
-      appBar: AppBar(title: Text(isEditing ? 'Edit Employee' : 'Add Employee')),
+      appBar: AppBar(title: const Text("Add Employee")),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -42,58 +86,53 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
             children: [
               TextFormField(
                 controller: nameController,
-                decoration: const InputDecoration(labelText: 'Employee Name'),
-                validator: (value) => value!.isEmpty ? 'Enter name' : null,
+                decoration: const InputDecoration(labelText: "Name"),
+                validator: (v) => v!.isEmpty ? "Enter name" : null,
               ),
-              const SizedBox(height: 12),
-
+              const SizedBox(height: 16),
               TextFormField(
                 controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                validator: (value) => value!.isEmpty ? 'Enter email' : null,
+                decoration: const InputDecoration(labelText: "Email"),
+                validator: (v) => v!.isEmpty ? "Enter email" : null,
               ),
-              const SizedBox(height: 12),
-
-              DropdownButtonFormField<String>(
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: passwordController,
+                decoration: const InputDecoration(labelText: "Password"),
+                obscureText: true,
+                validator: (v) =>
+                    v!.length < 6 ? "Min 6 characters required" : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: hourlyRateController,
+                decoration: const InputDecoration(labelText: "Hourly Rate"),
+                keyboardType: TextInputType.number,
+                validator: (v) => v!.isEmpty ? "Enter hourly rate" : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField(
                 value: selectedRole,
-                decoration: const InputDecoration(labelText: 'Role'),
                 items: const [
-                  DropdownMenuItem(value: 'Employee', child: Text('Employee')),
-                  DropdownMenuItem(value: 'Admin', child: Text('Admin')),
-                  DropdownMenuItem(
-                    value: 'Structural Engineer',
-                    child: Text('Structural Engineer'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Draftsman',
-                    child: Text('Draftsman'),
-                  ),
+                  DropdownMenuItem(value: "Employee", child: Text("Employee")),
+                  DropdownMenuItem(value: "Admin", child: Text("Admin")),
+                  DropdownMenuItem(value: "Director", child: Text("Director")),
                 ],
                 onChanged: (value) {
-                  setState(() {
-                    selectedRole = value!;
-                  });
+                  selectedRole = value!;
                 },
+                decoration: const InputDecoration(labelText: "Role"),
               ),
-
-              const SizedBox(height: 20),
-
-              ElevatedButton(
-                onPressed: () {
-                  if (_formKey.currentState!.validate()) {
-                    final updatedEmployee = {
-                      'name': nameController.text,
-                      'email': emailController.text,
-                      'role': selectedRole,
-                      'id':
-                          widget.employeeData?['id'] ??
-                          'EMP-${DateTime.now().millisecondsSinceEpoch}',
-                    };
-
-                    Navigator.pop(context, updatedEmployee);
-                  }
-                },
-                child: Text(isEditing ? 'Update Employee' : 'Save Employee'),
+              const SizedBox(height: 30),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: isLoading ? null : _createEmployee,
+                  child: isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("Create Employee"),
+                ),
               ),
             ],
           ),

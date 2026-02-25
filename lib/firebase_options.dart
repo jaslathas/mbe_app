@@ -83,4 +83,5 @@ class DefaultFirebaseOptions {
     authDomain: 'time-track-mbe.firebaseapp.com',
     storageBucket: 'time-track-mbe.firebasestorage.app',
   );
+
 }

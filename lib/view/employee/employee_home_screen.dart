@@ -1,192 +1,295 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:time_track/view/employee/profile_screen.dart';
 import 'package:time_track/view/employee/time_sheet_entry_screen.dart';
 
-class EmployeeHomeScreen extends StatelessWidget {
+class EmployeeHomeScreen extends StatefulWidget {
   const EmployeeHomeScreen({super.key});
+
+  @override
+  State<EmployeeHomeScreen> createState() => _EmployeeHomeScreenState();
+}
+
+class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
+  int selectedIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final today = DateTime.now();
-    final todayStart = DateTime(today.year, today.month, today.day);
-    final todayEnd = DateTime(today.year, today.month, today.day, 23, 59, 59);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SlotLog'),
-        actions: [
-          IconButton(icon: const Icon(Icons.person_outline), onPressed: () {}),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('timesheets')
-              .where('employeeId', isEqualTo: user!.uid)
-              .where(
-                'date',
-                isGreaterThanOrEqualTo: Timestamp.fromDate(todayStart),
-              )
-              .where('date', isLessThanOrEqualTo: Timestamp.fromDate(todayEnd))
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            final logs = snapshot.data!.docs;
-            final totalSlots = logs.length;
-            final totalHours = totalSlots * 0.5;
-
-            return ListView(
+      body: Row(
+        children: [
+          /// ================= SIDEBAR =================
+          Container(
+            width: 250,
+            color: const Color(0xFF1E1E2D),
+            child: Column(
               children: [
-                /// Greeting
-                Text(
-                  'Good Morning, ${user.email!.split('@')[0]} 👋',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Today: ${DateFormat('dd MMM yyyy').format(today)}',
-                  style: const TextStyle(color: Colors.grey),
-                ),
+                const SizedBox(height: 30),
 
-                const SizedBox(height: 20),
-
-                /// Log Button Card
-                Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Log Current Slot',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => const TimesheetEntryScreen(),
-                                ),
-                              );
-                            },
-                            child: const Text('LOG TIME SLOT'),
-                          ),
-                        ),
-                      ],
+                Column(
+                  children: [
+                    Image.asset("assets/logo_final.png", height: 50),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "SlotLog",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 40),
 
-                /// Today Summary
-                Card(
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _SummaryItem(
-                          label: 'Logged Slots',
-                          value: '$totalSlots / 18',
-                        ),
-                        _SummaryItem(
-                          label: 'Total Time',
-                          value: '${totalHours.toStringAsFixed(1)} h',
-                        ),
-                      ],
-                    ),
+                _sideMenuItem(Icons.dashboard, "Dashboard", 0),
+                _sideMenuItem(Icons.access_time, "Log Time", 1),
+                _sideMenuItem(Icons.list_alt, "My Logs", 2),
+                _sideMenuItem(Icons.person, "Profile", 3),
+
+                const Spacer(),
+
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.white70),
+                  title: const Text(
+                    "Logout",
+                    style: TextStyle(color: Colors.white70),
                   ),
+                  onTap: () async {
+                    await FirebaseAuth.instance.signOut();
+                    Navigator.pushReplacementNamed(context, '/login');
+                  },
                 ),
-
-                const SizedBox(height: 20),
-
-                /// Recent Logs
-                const Text(
-                  'Today Logs',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-
-                const SizedBox(height: 10),
-
-                if (logs.isEmpty)
-                  const Text(
-                    "No logs yet today",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-
-                ...logs.map((doc) {
-                  return _RecentLogTile(
-                    time: doc['timeSlot'],
-                    project: doc['projectName'] ?? '',
-                  );
-                }).toList(),
 
                 const SizedBox(height: 20),
               ],
-            );
-          },
-        ),
+            ),
+          ),
+
+          /// ================= MAIN CONTENT =================
+          Expanded(
+            child: Column(
+              children: [
+                /// Top Bar
+                Container(
+                  height: 70,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(blurRadius: 4, color: Colors.black12),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _getTitle(),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.person_outline),
+                            onPressed: () {
+                              setState(() {
+                                selectedIndex = 3;
+                              });
+                            },
+                          ),
+                          Text(user?.email ?? ""),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                /// Content
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(24),
+                    color: const Color(0xFFF4F6FA),
+                    child: _getPageContent(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
-}
 
-/// Summary Item
-class _SummaryItem extends StatelessWidget {
-  final String label;
-  final String value;
+  /// ================= SIDEBAR ITEM =================
+  Widget _sideMenuItem(IconData icon, String title, int index) {
+    final isSelected = selectedIndex == index;
 
-  const _SummaryItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: const TextStyle(color: Colors.grey)),
-      ],
+    return ListTile(
+      leading: Icon(icon, color: isSelected ? Colors.white : Colors.white70),
+      title: Text(
+        title,
+        style: TextStyle(color: isSelected ? Colors.white : Colors.white70),
+      ),
+      tileColor: isSelected ? Colors.blueAccent.withOpacity(0.3) : null,
+      onTap: () {
+        setState(() {
+          selectedIndex = index;
+        });
+      },
     );
   }
-}
 
-/// Recent Log Tile
-class _RecentLogTile extends StatelessWidget {
-  final String time;
-  final String project;
+  /// ================= PAGE TITLE =================
+  String _getTitle() {
+    switch (selectedIndex) {
+      case 1:
+        return "Log Time Slot";
+      case 2:
+        return "My Logs";
+      case 3:
+        return "My Profile";
+      default:
+        return "Dashboard";
+    }
+  }
 
-  const _RecentLogTile({required this.time, required this.project});
+  /// ================= PAGE SWITCH =================
+  Widget _getPageContent() {
+    switch (selectedIndex) {
+      case 1:
+        return const TimesheetEntryScreen();
+      case 2:
+        return _logsView();
+      case 3:
+        return const EmployeeProfileScreen();
+      default:
+        return _dashboardView();
+    }
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.access_time),
-        title: Text(time),
-        subtitle: Text(project),
+  /// ================= DASHBOARD =================
+  Widget _dashboardView() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('timesheets')
+          .where('employeeUid', isEqualTo: user!.uid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final logs = snapshot.data!.docs;
+        final totalSlots = logs.length;
+        final totalHours = totalSlots * 0.5;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Welcome back 👋",
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 20),
+
+            Row(
+              children: [
+                _infoCard("Total Slots", totalSlots.toString()),
+                const SizedBox(width: 20),
+                _infoCard("Total Hours", totalHours.toStringAsFixed(1)),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// ================= MY LOGS =================
+  Widget _logsView() {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('timesheets')
+          .where('employeeId', isEqualTo: user!.uid)
+          .orderBy('timestamp', descending: true)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final logs = snapshot.data!.docs;
+
+        if (logs.isEmpty) {
+          return const Center(child: Text("No logs found"));
+        }
+
+        return ListView.builder(
+          itemCount: logs.length,
+          itemBuilder: (context, index) {
+            final doc = logs[index];
+            final timestamp = (doc['timestamp'] as Timestamp?)?.toDate();
+            final formattedDate = timestamp != null
+                ? DateFormat('dd MMM yyyy – hh:mm a').format(timestamp)
+                : "";
+
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              child: ListTile(
+                leading: const Icon(Icons.access_time),
+                title: Text(doc['timeSlot'] ?? ''),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(doc['projectName'] ?? ''),
+                    if (doc['description'] != null)
+                      Text(
+                        doc['description'],
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                    Text(formattedDate, style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// ================= INFO CARD =================
+  Widget _infoCard(String title, String value) {
+    return Expanded(
+      child: Card(
+        elevation: 3,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(title),
+            ],
+          ),
+        ),
       ),
     );
   }

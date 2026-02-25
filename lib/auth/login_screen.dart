@@ -1,3 +1,4 @@
+import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,9 +10,13 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
+class _LoginScreenState extends State<LoginScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _imageController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
+  final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
 
@@ -21,31 +26,78 @@ class _LoginScreenState extends State<LoginScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  @override
+  void initState() {
+    super.initState();
+
+    _imageController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _imageController,
+      curve: Curves.easeIn,
+    );
+
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0.3, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _imageController, curve: Curves.easeOut));
+
+    _imageController.forward();
+  }
+
+  @override
+  void dispose() {
+    _imageController.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  ////////////////////////////////////////////////////////////
+  /// LOGIN FUNCTION
+  ////////////////////////////////////////////////////////////
+
   Future<void> _loginUser() async {
     if (!_formKey.currentState!.validate()) return;
 
     try {
       setState(() => _isLoading = true);
 
-      UserCredential userCredential = await _auth.signInWithEmailAndPassword(
+      // 🔹 Firebase Auth Login
+      final userCredential = await _auth.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
       );
 
-      String uid = userCredential.user!.uid;
+      final uid = userCredential.user!.uid;
 
-      DocumentSnapshot userDoc = await _firestore
-          .collection('users')
-          .doc(uid)
-          .get();
+      // 🔹 Fetch Firestore User Profile
+      final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
-        throw Exception("User data not found");
+        await _auth.signOut();
+        throw Exception("User profile not found. Contact admin.");
       }
 
-      String role = userDoc['role'];
+      final userData = userDoc.data()!;
+
+      final role = (userData['role'] ?? '').toString().toLowerCase();
+
+      final isActive = userData['isActive'] ?? true;
+
+      if (!isActive) {
+        await _auth.signOut();
+        throw Exception("Account is deactivated. Contact admin.");
+      }
 
       if (!mounted) return;
+
+      ////////////////////////////////////////////////////////////
+      /// ROLE BASED NAVIGATION
+      ////////////////////////////////////////////////////////////
 
       if (role == 'employee') {
         Navigator.pushReplacementNamed(context, '/employeeHome');
@@ -54,12 +106,25 @@ class _LoginScreenState extends State<LoginScreen> {
       } else if (role == 'director') {
         Navigator.pushReplacementNamed(context, '/directorDashboard');
       } else {
-        throw Exception("Invalid role");
+        await _auth.signOut();
+        throw Exception("Invalid role assigned.");
       }
     } on FirebaseAuthException catch (e) {
+      String message = "Login failed";
+
+      if (e.code == 'user-not-found') {
+        message = "No user found with this email.";
+      } else if (e.code == 'wrong-password') {
+        message = "Incorrect password.";
+      } else if (e.code == 'invalid-email') {
+        message = "Invalid email format.";
+      } else if (e.code == 'too-many-requests') {
+        message = "Too many attempts. Try again later.";
+      }
+
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.message ?? "Login failed")));
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       ScaffoldMessenger.of(
         context,
@@ -68,6 +133,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
+  ////////////////////////////////////////////////////////////
+  /// RESET PASSWORD
+  ////////////////////////////////////////////////////////////
 
   Future<void> _resetPassword() async {
     if (_emailCtrl.text.isEmpty) {
@@ -84,53 +153,92 @@ class _LoginScreenState extends State<LoginScreen> {
     ).showSnackBar(const SnackBar(content: Text("Password reset email sent")));
   }
 
-  @override
-  void dispose() {
-    _emailCtrl.dispose();
-    _passwordCtrl.dispose();
-    super.dispose();
-  }
+  ////////////////////////////////////////////////////////////
+  /// UI
+  ////////////////////////////////////////////////////////////
 
   @override
   Widget build(BuildContext context) {
+    final isSmallScreen = MediaQuery.of(context).size.width < 900;
+
     return Scaffold(
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+      appBar: AppBar(
+        toolbarHeight: 75,
+        title: Row(
+          children: [
+            Image.asset('assets/logo_final.png', height: 45),
+            const SizedBox(width: 15),
+            Expanded(
+              child: AnimatedTextKit(
+                repeatForever: true,
+                animatedTexts: [
+                  TyperAnimatedText(
+                    'MALABAR BUREAU OF ENGINEERING',
+                    textStyle: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: isSmallScreen
+          ? _buildForm()
+          : Row(
+              children: [
+                Expanded(flex: 5, child: _buildForm()),
+                Expanded(
+                  flex: 7,
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: SlideTransition(
+                      position: _slideAnimation,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          image: DecorationImage(
+                            image: AssetImage("assets/login_image.jpg"),
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Center(
+      child: SingleChildScrollView(
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(40),
           child: Form(
             key: _formKey,
             child: Column(
               children: [
                 const Icon(Icons.login, size: 70),
-                const SizedBox(height: 20),
-                const Text(
-                  "Login",
-                  style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-                ),
                 const SizedBox(height: 30),
 
-                /// Email
                 TextFormField(
                   controller: _emailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: "Email",
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: const InputDecoration(labelText: "Email"),
                   validator: (v) => v == null || !v.contains('@')
                       ? "Enter valid email"
                       : null,
                 ),
+                const SizedBox(height: 20),
 
-                const SizedBox(height: 16),
-
-                /// Password
                 TextFormField(
                   controller: _passwordCtrl,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
                     labelText: "Password",
-                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -148,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       v == null || v.length < 6 ? "Minimum 6 characters" : null,
                 ),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
                 Align(
                   alignment: Alignment.centerRight,
@@ -158,25 +266,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 30),
 
                 _isLoading
                     ? const CircularProgressIndicator()
-                    : ElevatedButton(
-                        onPressed: _loginUser,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
+                    : SizedBox(
+                        width: double.infinity,
+                        height: 45,
+                        child: ElevatedButton(
+                          onPressed: _loginUser,
+                          child: const Text("LOGIN"),
                         ),
-                        child: const Text("LOGIN"),
                       ),
 
                 const SizedBox(height: 20),
 
-                TextButton(
-                  onPressed: () {
-                    Navigator.pushNamed(context, '/register');
-                  },
-                  child: const Text("Don't have an account? Register"),
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  children: [
+                    const Text("Don't have an account? "),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pushNamed(context, '/register');
+                      },
+                      child: const Text("Register"),
+                    ),
+                  ],
                 ),
               ],
             ),

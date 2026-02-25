@@ -1,29 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class AdminBillingScreen extends StatefulWidget {
-  const AdminBillingScreen({Key? key}) : super(key: key);
+class AdminProjectMonthlyScreen extends StatefulWidget {
+  const AdminProjectMonthlyScreen({Key? key}) : super(key: key);
 
   @override
-  State<AdminBillingScreen> createState() => _AdminBillingScreenState();
+  State<AdminProjectMonthlyScreen> createState() =>
+      _AdminProjectMonthlyScreenState();
 }
 
-class _AdminBillingScreenState extends State<AdminBillingScreen> {
+class _AdminProjectMonthlyScreenState extends State<AdminProjectMonthlyScreen> {
   String? selectedProjectId;
-  String? selectedProjectName;
-
   String selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Project Billing")),
+      appBar: AppBar(title: const Text("Project Monthly Report")),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // ================= PROJECT SELECT =================
+            // ================= PROJECT DROPDOWN =================
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('projects')
@@ -45,9 +44,6 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
                     return DropdownMenuItem<String>(
                       value: project.id,
                       child: Text(project['projectName']),
-                      onTap: () {
-                        selectedProjectName = project['projectName'];
-                      },
                     );
                   }).toList(),
                   onChanged: (value) {
@@ -91,7 +87,7 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
 
             const SizedBox(height: 20),
 
-            // ================= BILLING REPORT =================
+            // ================= REPORT =================
             if (selectedProjectId != null)
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
@@ -108,28 +104,25 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
                     final docs = snapshot.data!.docs;
 
                     if (docs.isEmpty) {
-                      return const Center(child: Text("No billing data found"));
+                      return const Center(child: Text("No data found"));
                     }
 
                     Map<String, Map<String, dynamic>> grouped = {};
-                    double grandTotal = 0;
+                    double totalHours = 0;
+                    double totalAmount = 0;
 
                     for (var doc in docs) {
                       final data = doc.data() as Map<String, dynamic>;
 
                       String userName = data['userName'];
                       double hours = data['hours'];
-                      double rate = data['hourlyRate'];
                       double amount = data['totalAmount'];
 
-                      grandTotal += amount;
+                      totalHours += hours;
+                      totalAmount += amount;
 
                       if (!grouped.containsKey(userName)) {
-                        grouped[userName] = {
-                          'hours': 0.0,
-                          'rate': rate,
-                          'amount': 0.0,
-                        };
+                        grouped[userName] = {'hours': 0.0, 'amount': 0.0};
                       }
 
                       grouped[userName]!['hours'] += hours;
@@ -137,25 +130,7 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
                     }
 
                     return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Invoice Header
-                        Text(
-                          "Billing Summary",
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 10),
-
-                        Text("Project: ${selectedProjectName ?? ""}"),
-                        Text("Month: $selectedMonth"),
-
-                        const Divider(height: 30),
-
-                        // Employee Breakdown
                         Expanded(
                           child: ListView(
                             children: grouped.entries.map((entry) {
@@ -163,7 +138,7 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
                                 child: ListTile(
                                   title: Text(entry.key),
                                   subtitle: Text(
-                                    "Hours: ${entry.value['hours']}  |  Rate: ₹${entry.value['rate']}",
+                                    "Hours: ${entry.value['hours']}",
                                   ),
                                   trailing: Text(
                                     "₹ ${entry.value['amount'].toStringAsFixed(2)}",
@@ -176,21 +151,25 @@ class _AdminBillingScreenState extends State<AdminBillingScreen> {
 
                         const Divider(),
 
-                        // Grand Total
                         ListTile(
                           title: const Text(
-                            "Total Project Amount",
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            "Total Project Hours",
+                            style: TextStyle(fontWeight: FontWeight.bold),
                           ),
                           trailing: Text(
-                            "₹ ${grandTotal.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            totalHours.toString(),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+
+                        ListTile(
+                          title: const Text(
+                            "Total Project Billing",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          trailing: Text(
+                            "₹ ${totalAmount.toStringAsFixed(2)}",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
                         ),
                       ],
