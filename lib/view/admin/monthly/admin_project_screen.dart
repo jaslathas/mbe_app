@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class AdminProjectMonthlyScreen extends StatefulWidget {
-  const AdminProjectMonthlyScreen({Key? key}) : super(key: key);
+  const AdminProjectMonthlyScreen({super.key});
 
   @override
   State<AdminProjectMonthlyScreen> createState() =>
@@ -11,8 +11,30 @@ class AdminProjectMonthlyScreen extends StatefulWidget {
 
 class _AdminProjectMonthlyScreenState extends State<AdminProjectMonthlyScreen> {
   String? selectedProjectId;
+
+  // Default month (current)
   String selectedMonth =
       "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
+
+  List<String> monthList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    generateMonthList();
+  }
+
+  // ================= GENERATE MONTH LIST =================
+  void generateMonthList() {
+    final now = DateTime.now();
+
+    for (int i = 0; i < 24; i++) {
+      final date = DateTime(now.year, now.month - i);
+      String formatted =
+          "${date.year}-${date.month.toString().padLeft(2, '0')}";
+      monthList.add(formatted);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,14 +58,17 @@ class _AdminProjectMonthlyScreenState extends State<AdminProjectMonthlyScreen> {
                 final projects = snapshot.data!.docs;
 
                 return DropdownButtonFormField<String>(
-                  value: selectedProjectId,
+                  initialValue: selectedProjectId,
                   decoration: const InputDecoration(
                     labelText: "Select Project",
+                    border: OutlineInputBorder(),
                   ),
                   items: projects.map((project) {
+                    final data = project.data() as Map<String, dynamic>;
+
                     return DropdownMenuItem<String>(
                       value: project.id,
-                      child: Text(project['projectName']),
+                      child: Text(data['projectName'] ?? ''),
                     );
                   }).toList(),
                   onChanged: (value) {
@@ -57,32 +82,24 @@ class _AdminProjectMonthlyScreenState extends State<AdminProjectMonthlyScreen> {
 
             const SizedBox(height: 20),
 
-            // ================= MONTH SELECT =================
-            Row(
-              children: [
-                Text("Month: $selectedMonth"),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.calendar_month),
-                  onPressed: () async {
-                    final now = DateTime.now();
-
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: now,
-                      firstDate: DateTime(2023),
-                      lastDate: now,
-                    );
-
-                    if (picked != null) {
-                      setState(() {
-                        selectedMonth =
-                            "${picked.year}-${picked.month.toString().padLeft(2, '0')}";
-                      });
-                    }
-                  },
-                ),
-              ],
+            // ================= MONTH DROPDOWN =================
+            DropdownButtonFormField<String>(
+              initialValue: selectedMonth,
+              decoration: const InputDecoration(
+                labelText: "Select Month",
+                border: OutlineInputBorder(),
+              ),
+              items: monthList.map((month) {
+                return DropdownMenuItem<String>(
+                  value: month,
+                  child: Text(month),
+                );
+              }).toList(),
+              onChanged: (value) {
+                setState(() {
+                  selectedMonth = value!;
+                });
+              },
             ),
 
             const SizedBox(height: 20),
@@ -114,9 +131,9 @@ class _AdminProjectMonthlyScreenState extends State<AdminProjectMonthlyScreen> {
                     for (var doc in docs) {
                       final data = doc.data() as Map<String, dynamic>;
 
-                      String userName = data['userName'];
-                      double hours = data['hours'];
-                      double amount = data['totalAmount'];
+                      String userName = data['userName'] ?? '';
+                      double hours = (data['hours'] ?? 0).toDouble();
+                      double amount = (data['totalAmount'] ?? 0).toDouble();
 
                       totalHours += hours;
                       totalAmount += amount;

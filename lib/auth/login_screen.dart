@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -46,6 +48,8 @@ class _LoginScreenState extends State<LoginScreen>
     ).animate(CurvedAnimation(parent: _imageController, curve: Curves.easeOut));
 
     _imageController.forward();
+
+    _checkFirstAdmin();
   }
 
   @override
@@ -54,6 +58,39 @@ class _LoginScreenState extends State<LoginScreen>
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
+  }
+
+  ////////////////////////////////////////////////////////////
+  /// CREATE FIRST ADMIN
+  ////////////////////////////////////////////////////////////
+
+  Future<void> _checkFirstAdmin() async {
+    final users = await _firestore.collection('users').limit(1).get();
+
+    if (users.docs.isEmpty) {
+      try {
+        UserCredential cred = await _auth.createUserWithEmailAndPassword(
+          email: "admin@company.com",
+          password: "admin123",
+        );
+
+        await _firestore.collection('users').doc(cred.user!.uid).set({
+          "name": "Super Admin",
+          "email": "admin@company.com",
+          "role": "admin",
+          "hourlyRate": 0,
+          "employeeCode": "ADMIN-001",
+          "isActive": true,
+          "createdAt": FieldValue.serverTimestamp(),
+        });
+
+        await _auth.signOut();
+
+        print("Admin created successfully");
+      } catch (e) {
+        print("Admin creation skipped: $e");
+      }
+    }
   }
 
   ////////////////////////////////////////////////////////////
@@ -66,7 +103,6 @@ class _LoginScreenState extends State<LoginScreen>
     try {
       setState(() => _isLoading = true);
 
-      // 🔹 Firebase Auth Login
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text.trim(),
@@ -74,7 +110,8 @@ class _LoginScreenState extends State<LoginScreen>
 
       final uid = userCredential.user!.uid;
 
-      // 🔹 Fetch Firestore User Profile
+      print("Logged UID: $uid");
+
       final userDoc = await _firestore.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
@@ -84,8 +121,9 @@ class _LoginScreenState extends State<LoginScreen>
 
       final userData = userDoc.data()!;
 
-      final role = (userData['role'] ?? '').toString().toLowerCase();
+      print("User Data: $userData");
 
+      final role = (userData['role'] ?? '').toString().toLowerCase();
       final isActive = userData['isActive'] ?? true;
 
       if (!isActive) {
@@ -149,6 +187,7 @@ class _LoginScreenState extends State<LoginScreen>
     await _auth.sendPasswordResetEmail(email: _emailCtrl.text.trim());
 
     ScaffoldMessenger.of(
+      // ignore: use_build_context_synchronously
       context,
     ).showSnackBar(const SnackBar(content: Text("Password reset email sent")));
   }
@@ -227,11 +266,12 @@ class _LoginScreenState extends State<LoginScreen>
 
                 TextFormField(
                   controller: _emailCtrl,
-                  decoration: const InputDecoration(labelText: "Email"),
+                  decoration: const InputDecoration(labelText: "UserId"),
                   validator: (v) => v == null || !v.contains('@')
-                      ? "Enter valid email"
+                      ? "Enter valid userid"
                       : null,
                 ),
+
                 const SizedBox(height: 20),
 
                 TextFormField(
@@ -281,17 +321,9 @@ class _LoginScreenState extends State<LoginScreen>
 
                 const SizedBox(height: 20),
 
-                Wrap(
-                  alignment: WrapAlignment.center,
-                  children: [
-                    const Text("Don't have an account? "),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/register');
-                      },
-                      child: const Text("Register"),
-                    ),
-                  ],
+                const Text(
+                  "Account will be created by Admin.",
+                  style: TextStyle(color: Colors.grey),
                 ),
               ],
             ),

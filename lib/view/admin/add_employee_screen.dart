@@ -67,6 +67,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
       }
     } catch (e) {
       ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
         context,
       ).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
@@ -112,7 +113,7 @@ class _AddEmployeeScreenState extends State<AddEmployeeScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField(
-                value: selectedRole,
+                initialValue: selectedRole,
                 items: const [
                   DropdownMenuItem(value: "Employee", child: Text("Employee")),
                   DropdownMenuItem(value: "Admin", child: Text("Admin")),

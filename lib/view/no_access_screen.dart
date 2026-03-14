@@ -26,6 +26,7 @@ class NoAccessScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
+                  // ignore: deprecated_member_use
                   color: Colors.red.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),

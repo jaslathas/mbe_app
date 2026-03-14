@@ -125,7 +125,7 @@ class EmployeeListScreen extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              value: role,
+              initialValue: role,
               items: const [
                 DropdownMenuItem(value: 'Employee', child: Text("Employee")),
                 DropdownMenuItem(value: 'Admin', child: Text("Admin")),
@@ -154,6 +154,7 @@ class EmployeeListScreen extends StatelessWidget {
                     'role': role,
                   });
 
+              // ignore: use_build_context_synchronously
               Navigator.pop(context);
             },
             child: const Text("Update"),

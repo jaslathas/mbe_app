@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class TimesheetEntryScreen extends StatefulWidget {
-  const TimesheetEntryScreen({Key? key}) : super(key: key);
+  const TimesheetEntryScreen({super.key});
 
   @override
   State<TimesheetEntryScreen> createState() => _TimesheetEntryScreenState();
@@ -113,6 +113,7 @@ class _TimesheetEntryScreenState extends State<TimesheetEntryScreen> {
 
     if (!userDoc.exists) {
       ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
         context,
       ).showSnackBar(const SnackBar(content: Text("User data not found")));
       return;
@@ -155,6 +156,7 @@ class _TimesheetEntryScreenState extends State<TimesheetEntryScreen> {
     await fetchLoggedSlots();
 
     ScaffoldMessenger.of(
+      // ignore: use_build_context_synchronously
       context,
     ).showSnackBar(const SnackBar(content: Text("Timesheet Saved")));
   }
@@ -212,7 +214,6 @@ class _TimesheetEntryScreenState extends State<TimesheetEntryScreen> {
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('projects')
-                        .where('isDeleted', isEqualTo: false)
                         .where('isActive', isEqualTo: true)
                         .snapshots(),
                     builder: (context, snapshot) {
@@ -227,7 +228,7 @@ class _TimesheetEntryScreenState extends State<TimesheetEntryScreen> {
                       final projects = snapshot.data!.docs;
 
                       return DropdownButtonFormField<String>(
-                        value: selectedProjectDocId,
+                        initialValue: selectedProjectDocId,
                         decoration: const InputDecoration(
                           labelText: "Select Project",
                           border: OutlineInputBorder(),
@@ -264,7 +265,7 @@ class _TimesheetEntryScreenState extends State<TimesheetEntryScreen> {
 
                   // TIME SLOT
                   DropdownButtonFormField<String>(
-                    value: selectedTimeSlot,
+                    initialValue: selectedTimeSlot,
                     decoration: const InputDecoration(
                       labelText: "Select Time Slot",
                       border: OutlineInputBorder(),

@@ -1,64 +1,117 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 
-class AdminEmployeeMonthlyScreen extends StatefulWidget {
-  const AdminEmployeeMonthlyScreen({Key? key}) : super(key: key);
+class EmployeeMonthlyProjectScreen extends StatefulWidget {
+  const EmployeeMonthlyProjectScreen({super.key});
 
   @override
-  State<AdminEmployeeMonthlyScreen> createState() =>
-      _AdminEmployeeMonthlyScreenState();
+  State<EmployeeMonthlyProjectScreen> createState() =>
+      _EmployeeMonthlyProjectScreenState();
 }
 
-class _AdminEmployeeMonthlyScreenState
-    extends State<AdminEmployeeMonthlyScreen> {
+class _EmployeeMonthlyProjectScreenState
+    extends State<EmployeeMonthlyProjectScreen> {
   String? selectedEmployeeId;
+  String? selectedMonth;
 
-  String selectedMonth =
-      "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}";
+  Map<String, double> projectHours = {};
+  bool loading = false;
+
+  final List<String> months = List.generate(
+    12,
+    (index) =>
+        DateFormat('yyyy-MM').format(DateTime(DateTime.now().year, index + 1)),
+  );
+
+  Future<void> fetchData() async {
+    if (selectedEmployeeId == null || selectedMonth == null) return;
+
+    setState(() {
+      loading = true;
+      projectHours.clear();
+    });
+
+    DateTime start = DateTime.parse("$selectedMonth-01");
+    DateTime end = DateTime(start.year, start.month + 1, 1);
+
+    final query = await FirebaseFirestore.instance
+        .collection('timesheets')
+        .where('userId', isEqualTo: selectedEmployeeId)
+        .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(start))
+        .where('date', isLessThan: Timestamp.fromDate(end))
+        .get();
+
+    for (var doc in query.docs) {
+      final data = doc.data();
+
+      String projectName = data['projectName'] ?? "Unknown";
+
+      double hours = (data['hours'] ?? 0).toDouble();
+
+      projectHours[projectName] = (projectHours[projectName] ?? 0) + hours;
+    }
+
+    setState(() {
+      loading = false;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Employee Monthly Report")),
+      appBar: AppBar(title: const Text("Employee Monthly Project Report")),
+
       body: Padding(
         padding: const EdgeInsets.all(16),
+
         child: Column(
           children: [
-            // ================= EMPLOYEE DROPDOWN =================
+            /// EMPLOYEE DROPDOWN
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .where('role', isEqualTo: 'employee')
-                  .where('isActive', isEqualTo: true)
+                  .where('role', isEqualTo: 'Employee')
                   .snapshots(),
+
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const CircularProgressIndicator();
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Text("No employees found");
                 }
 
                 final employees = snapshot.data!.docs;
 
                 return DropdownButtonFormField<String>(
-                  value: selectedEmployeeId,
+                  initialValue: selectedEmployeeId,
+
                   decoration: const InputDecoration(
                     labelText: "Select Employee",
                     border: OutlineInputBorder(),
                   ),
-                  items: employees.map((emp) {
-                    final data = emp.data() as Map<String, dynamic>;
 
-                    final name = data['name'] ?? "No Name";
-                    final code = data['employeeCode'] ?? "No Code";
+                  items: employees.map((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+
+                    String userName =
+                        data['userName'] ?? data['name'] ?? "No Name";
 
                     return DropdownMenuItem<String>(
-                      value: emp.id,
-                      child: Text("$name ($code)"),
+                      value: doc.id,
+
+                      child: Text(userName),
                     );
                   }).toList(),
+
                   onChanged: (value) {
                     setState(() {
                       selectedEmployeeId = value;
                     });
+
+                    fetchData();
                   },
                 );
               },
@@ -66,124 +119,55 @@ class _AdminEmployeeMonthlyScreenState
 
             const SizedBox(height: 20),
 
-            // ================= MONTH SELECT =================
-            Row(
-              children: [
-                Text("Month: $selectedMonth"),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.calendar_month),
-                  onPressed: () async {
-                    final now = DateTime.now();
+            /// MONTH DROPDOWN
+            DropdownButtonFormField<String>(
+              initialValue: selectedMonth,
 
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: now,
-                      firstDate: DateTime(2023),
-                      lastDate: now,
-                    );
+              decoration: const InputDecoration(
+                labelText: "Select Month",
+                border: OutlineInputBorder(),
+              ),
 
-                    if (picked != null) {
-                      setState(() {
-                        selectedMonth =
-                            "${picked.year}-${picked.month.toString().padLeft(2, '0')}";
-                      });
-                    }
-                  },
-                ),
-              ],
+              items: months.map((month) {
+                return DropdownMenuItem(value: month, child: Text(month));
+              }).toList(),
+
+              onChanged: (value) {
+                setState(() {
+                  selectedMonth = value;
+                });
+
+                fetchData();
+              },
             ),
 
             const SizedBox(height: 20),
 
-            // ================= REPORT SECTION =================
-            if (selectedEmployeeId != null)
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('timesheets')
-                      .where('employeeUid', isEqualTo: selectedEmployeeId)
-                      .where('month', isEqualTo: selectedMonth)
-                      .where('status', isEqualTo: 'approved')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+            /// RESULTS
+            Expanded(
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : projectHours.isEmpty
+                  ? const Center(child: Text("No data found"))
+                  : ListView.builder(
+                      itemCount: projectHours.length,
+                      itemBuilder: (context, index) {
+                        final entry = projectHours.entries.elementAt(index);
 
-                    final docs = snapshot.data!.docs;
+                        return Card(
+                          margin: const EdgeInsets.symmetric(vertical: 8),
 
-                    if (docs.isEmpty) {
-                      return const Center(child: Text("No data found"));
-                    }
+                          child: ListTile(
+                            title: Text(entry.key),
 
-                    Map<String, double> projectHours = {};
-                    double totalHours = 0;
-                    double totalAmount = 0;
+                            subtitle: Text("Total Hours: ${entry.value}"),
 
-                    for (var doc in docs) {
-                      final data = doc.data() as Map<String, dynamic>;
-
-                      String projectName = data['projectName'] ?? "Unknown";
-
-                      double hours = (data['hours'] ?? 0).toDouble();
-
-                      double amount = (data['totalAmount'] ?? 0).toDouble();
-
-                      totalHours += hours;
-                      totalAmount += amount;
-
-                      if (!projectHours.containsKey(projectName)) {
-                        projectHours[projectName] = 0;
-                      }
-
-                      projectHours[projectName] =
-                          projectHours[projectName]! + hours;
-                    }
-
-                    return Column(
-                      children: [
-                        Expanded(
-                          child: ListView(
-                            children: projectHours.entries.map((e) {
-                              return Card(
-                                child: ListTile(
-                                  title: Text(e.key),
-                                  subtitle: Text("Hours: ${e.value}"),
-                                ),
-                              );
-                            }).toList(),
+                            trailing: const Icon(Icons.work_outline),
                           ),
-                        ),
-
-                        const Divider(),
-
-                        ListTile(
-                          title: const Text(
-                            "Total Hours",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          trailing: Text(
-                            totalHours.toString(),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-
-                        ListTile(
-                          title: const Text(
-                            "Total Billing",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          trailing: Text(
-                            "₹ ${totalAmount.toStringAsFixed(2)}",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ),
+                        );
+                      },
+                    ),
+            ),
           ],
         ),
       ),

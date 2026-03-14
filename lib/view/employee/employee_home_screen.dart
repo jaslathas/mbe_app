@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import 'package:time_track/view/employee/my_time_sheet_screen.dart';
 import 'package:time_track/view/employee/profile_screen.dart';
 import 'package:time_track/view/employee/time_sheet_entry_screen.dart';
 
@@ -35,7 +36,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                     Image.asset("assets/logo_final.png", height: 50),
                     const SizedBox(height: 10),
                     const Text(
-                      "SlotLog",
+                      "Malabar Bureau of Engineering",
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -61,6 +62,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
                   ),
                   onTap: () async {
                     await FirebaseAuth.instance.signOut();
+                    // ignore: use_build_context_synchronously
                     Navigator.pushReplacementNamed(context, '/login');
                   },
                 ),
@@ -137,6 +139,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
         title,
         style: TextStyle(color: isSelected ? Colors.white : Colors.white70),
       ),
+      // ignore: deprecated_member_use
       tileColor: isSelected ? Colors.blueAccent.withOpacity(0.3) : null,
       onTap: () {
         setState(() {
@@ -166,7 +169,7 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
       case 1:
         return const TimesheetEntryScreen();
       case 2:
-        return _logsView();
+        return MyTimesheetsScreen();
       case 3:
         return const EmployeeProfileScreen();
       default:
@@ -175,122 +178,167 @@ class _EmployeeHomeScreenState extends State<EmployeeHomeScreen> {
   }
 
   /// ================= DASHBOARD =================
+  /// ================= DASHBOARD =================
   Widget _dashboardView() {
     final user = FirebaseAuth.instance.currentUser;
 
+    final now = DateTime.now();
+    final firstDayOfMonth = DateTime(now.year, now.month, 1);
+    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('timesheets')
-          .where('employeeUid', isEqualTo: user!.uid)
+          .where('userId', isEqualTo: user!.uid) // ✅ unified field
+          .where(
+            'date',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(firstDayOfMonth),
+          )
+          .where(
+            'date',
+            isLessThanOrEqualTo: Timestamp.fromDate(lastDayOfMonth),
+          )
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final logs = snapshot.data!.docs;
-        final totalSlots = logs.length;
+        if (snapshot.hasError) {
+          return Center(child: Text("Error: ${snapshot.error}"));
+        }
+
+        final docs = snapshot.data?.docs ?? [];
+
+        if (docs.isEmpty) {
+          return const Center(child: Text("No data for this month"));
+        }
+
+        /// ================= CALCULATIONS =================
+
+        Map<String, Map<String, dynamic>> projectData = {};
+        Set<String> attendanceDays = {};
+
+        for (var doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          final projectCode = data['projectCode'] ?? '';
+          final projectName = data['projectName'] ?? '';
+          final Timestamp timestamp = data['date'];
+          final date = timestamp.toDate();
+
+          // Attendance unique days
+          attendanceDays.add("${date.year}-${date.month}-${date.day}");
+
+          // Project-wise grouping
+          if (!projectData.containsKey(projectCode)) {
+            projectData[projectCode] = {'name': projectName, 'slots': 0};
+          }
+
+          projectData[projectCode]!['slots'] += 1;
+        }
+
+        final totalSlots = docs.length;
         final totalHours = totalSlots * 0.5;
+        final workingDays = attendanceDays.length;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Welcome back 👋",
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 20),
+        const expectedWorkingDays = 25;
+        final attendancePercent = (workingDays / expectedWorkingDays) * 100;
 
-            Row(
-              children: [
-                _infoCard("Total Slots", totalSlots.toString()),
-                const SizedBox(width: 20),
-                _infoCard("Total Hours", totalHours.toStringAsFixed(1)),
-              ],
-            ),
-          ],
-        );
-      },
-    );
-  }
+        /// ================= UI =================
 
-  /// ================= MY LOGS =================
-  Widget _logsView() {
-    final user = FirebaseAuth.instance.currentUser;
-
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('timesheets')
-          .where('employeeId', isEqualTo: user!.uid)
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final logs = snapshot.data!.docs;
-
-        if (logs.isEmpty) {
-          return const Center(child: Text("No logs found"));
-        }
-
-        return ListView.builder(
-          itemCount: logs.length,
-          itemBuilder: (context, index) {
-            final doc = logs[index];
-            final timestamp = (doc['timestamp'] as Timestamp?)?.toDate();
-            final formattedDate = timestamp != null
-                ? DateFormat('dd MMM yyyy – hh:mm a').format(timestamp)
-                : "";
-
-            return Card(
-              margin: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                leading: const Icon(Icons.access_time),
-                title: Text(doc['timeSlot'] ?? ''),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(doc['projectName'] ?? ''),
-                    if (doc['description'] != null)
-                      Text(
-                        doc['description'],
-                        style: const TextStyle(color: Colors.grey),
-                      ),
-                    Text(formattedDate, style: const TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  /// ================= INFO CARD =================
-  Widget _infoCard(String title, String value) {
-    return Expanded(
-      child: Card(
-        elevation: 3,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
+        return SingleChildScrollView(
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
+                "MONTHLY SUMMARY - ${DateFormat('MMMM yyyy').format(now).toUpperCase()}",
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 20),
+
+              /// 🔹 PROJECT SUMMARY
+              Card(
+                elevation: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: projectData.entries.map((entry) {
+                      final code = entry.key;
+                      final name = entry.value['name'];
+                      final slots = entry.value['slots'];
+                      final hours = slots * 0.5;
+
+                      return ListTile(
+                        title: Text(
+                          "$code - $name",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        trailing: Text(
+                          "${hours.toStringAsFixed(1)} hrs",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(title),
+
+              const SizedBox(height: 30),
+
+              /// 🔹 ATTENDANCE
+              const Text(
+                "ATTENDANCE SUMMARY",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                elevation: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      Text(
+                        "Working Days: $workingDays",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Divider(thickness: 1),
+                      Text(
+                        "Total Hours: ${totalHours.toStringAsFixed(1)} hrs",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Divider(thickness: 1),
+                      Text(
+                        "Attendance: ${attendancePercent.toStringAsFixed(1)}%",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }

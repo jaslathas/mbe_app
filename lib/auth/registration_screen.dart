@@ -22,9 +22,39 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  @override
+  void initState() {
+    super.initState();
+    _checkAdminAccess();
+  }
+
   ////////////////////////////////////////////////////////////////////////
   /// REGISTER USER
   ////////////////////////////////////////////////////////////////////////
+  ///
+  ///
+  Future<void> _checkAdminAccess() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    final role = doc['role'];
+
+    if (role != 'admin') {
+      if (mounted) {
+        Navigator.pop(context);
+
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Access denied")));
+      }
+    }
+  }
 
   Future<void> _registerUser() async {
     if (!_formKey.currentState!.validate()) return;
@@ -212,7 +242,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 const SizedBox(height: 16),
 
                 DropdownButtonFormField<String>(
-                  value: _selectedRole,
+                  initialValue: _selectedRole,
                   decoration: const InputDecoration(labelText: "Role"),
                   items: const [
                     DropdownMenuItem(

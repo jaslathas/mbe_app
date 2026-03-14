@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class AdminApprovalScreen extends StatelessWidget {
-  const AdminApprovalScreen({Key? key}) : super(key: key);
+  const AdminApprovalScreen({super.key});
 
   Future<void> updateStatus(String docId, String status) async {
     await FirebaseFirestore.instance.collection('timesheets').doc(docId).update(

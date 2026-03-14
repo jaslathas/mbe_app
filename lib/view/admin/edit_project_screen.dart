@@ -57,6 +57,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
       await projectsRef.doc(widget.docId).update(data);
     }
 
+    // ignore: use_build_context_synchronously
     Navigator.pop(context);
   }
 
@@ -91,7 +92,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
               ),
               const SizedBox(height: 15),
               DropdownButtonFormField<String>(
-                value: status,
+                initialValue: status,
                 items: const [
                   DropdownMenuItem(value: "active", child: Text("Active")),
                   DropdownMenuItem(
@@ -99,6 +100,7 @@ class _EditProjectScreenState extends State<EditProjectScreen> {
                     child: Text("Completed"),
                   ),
                   DropdownMenuItem(value: "on-hold", child: Text("On Hold")),
+                  DropdownMenuItem(value: "revision", child: Text("Revision")),
                 ],
                 onChanged: (v) => setState(() => status = v!),
                 decoration: const InputDecoration(labelText: "Status"),

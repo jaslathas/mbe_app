@@ -42,6 +42,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
       );
     } catch (e) {
       ScaffoldMessenger.of(
+        // ignore: use_build_context_synchronously
         context,
       ).showSnackBar(SnackBar(content: Text("Upload failed: $e")));
     }
@@ -70,7 +71,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
 
           final name = data['name'] ?? '';
           final role = data['role'] ?? '';
-          final employeeId = data['employeeId'] ?? '';
+          final employeeCode = data['employeeCode'] ?? '';
           final email = user.email ?? '';
           final photoUrl = data['photoUrl'];
 
@@ -93,6 +94,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                     children: [
                       CircleAvatar(
                         radius: 55,
+                        // ignore: deprecated_member_use
                         backgroundColor: theme.colorScheme.primary.withOpacity(
                           0.2,
                         ),
@@ -164,14 +166,14 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                       children: [
                         ListTile(
                           leading: const Icon(Icons.email),
-                          title: const Text("Email"),
+                          title: const Text("User Id"),
                           subtitle: Text(email),
                         ),
                         const Divider(height: 1),
                         ListTile(
                           leading: const Icon(Icons.badge),
                           title: const Text("Employee ID"),
-                          subtitle: Text(employeeId),
+                          subtitle: Text(employeeCode),
                         ),
                       ],
                     ),
@@ -187,6 +189,7 @@ class _EmployeeProfileScreenState extends State<EmployeeProfileScreen> {
                       label: const Text("LOGOUT"),
                       onPressed: () async {
                         await FirebaseAuth.instance.signOut();
+                        // ignore: use_build_context_synchronously
                         Navigator.pushReplacementNamed(context, '/login');
                       },
                     ),
